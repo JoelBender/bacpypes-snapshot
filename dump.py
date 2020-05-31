@@ -1,10 +1,11 @@
 #!/usr/bin/python3
 
 import sys
-import shelve
 
 from bacpypes.debugging import bacpypes_debugging, ModuleLogger
 from bacpypes.consolelogging import ArgumentParser
+
+from db import Snapshot
 
 # some debugging
 _debug = 0
@@ -16,8 +17,8 @@ parser = ArgumentParser(description=__doc__)
 # database file name
 parser.add_argument("dbname", help="database file name")
 parser.add_argument("devid", help="device identifier", nargs="?", default="-")
-parser.add_argument("objid", help="database file name", nargs="?", default="-")
-parser.add_argument("propid", help="database file name", nargs="?", default="-")
+parser.add_argument("objid", help="object identifier", nargs="?", default="-")
+parser.add_argument("propid", help="property identifier", nargs="?", default="-")
 
 args = parser.parse_args()
 
@@ -26,18 +27,15 @@ if _debug:
 if _debug:
     _log.debug("    - args: %r", args)
 
-db = shelve.open(sys.argv[1], flag="r")
+snapshot = Snapshot(args.dbname)
 
 _log.debug("running")
 
-for key, value in db.items():
-    devid, objid, propid = eval(key)
-    if (args.devid != "-") and (int(args.devid) != devid):
-        continue
-    if (args.objid != "-") and (args.objid != objid):
-        continue
-    if (args.propid != "-") and (args.propid != propid):
-        continue
+for (devid, objid, propid, value) in snapshot.items(
+    devid=args.devid if args.devid != "-" else None,
+    objid=args.objid if args.objid != "-" else None,
+    propid=args.propid if args.propid != "-" else None,
+):
     if hasattr(value, "debug_contents"):
         print("{} {} {}".format(devid, objid, propid))
         value.debug_contents(file=sys.stdout)
@@ -52,4 +50,4 @@ for key, value in db.items():
 
 _log.debug("fini")
 
-db.close()
+snapshot.close()

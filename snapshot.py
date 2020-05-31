@@ -5,13 +5,12 @@ Snapshot
 
 This is an application to assist with the "discovery" process of finding
 BACnet routers, devices, objects, and property values.  It reads and/or writes
-a shelf, a Python persistent dictionary of property values it finds.
+a sqlite3 database with the property values it finds.
 """
 
 import sys
 import time
 import json
-import shelve
 
 from collections import defaultdict, OrderedDict
 
@@ -65,6 +64,8 @@ from bacpypes.local.device import LocalDeviceObject
 from bacpypes.service.device import WhoIsIAmServices
 from bacpypes.service.object import ReadWritePropertyServices
 
+from db import Snapshot
+
 # some debugging
 _debug = 0
 _log = ModuleLogger(globals())
@@ -73,7 +74,7 @@ _log = ModuleLogger(globals())
 args = None
 this_device = None
 this_application = None
-shelf = None
+snapshot = None
 
 # device information
 device_profile = defaultdict(DeviceObject)
@@ -85,26 +86,6 @@ interactive = sys.stdin.isatty()
 network_path_to_do_list = None
 who_is_to_do_list = None
 application_to_do_list = None
-
-#
-#   Snapshot
-#
-
-
-@bacpypes_debugging
-class Snapshot:
-    def __init__(self, filename, flag="c"):
-        self.shelf = shelve.open(filename, flag=flag)
-
-    def __getitem__(self, item):
-        return self.shelf[str(item)]
-
-    def __setitem__(self, item, value):
-        self.shelf[str(item)] = value
-
-    def close(self):
-        self.shelf.close()
-
 
 #
 #   ToDoItem
@@ -467,11 +448,11 @@ class WhoIsToDo(ToDoItem):
                 print("{} @ {}".format(device_instance, apdu.pduSource))
 
             # update the database
-            shelf[device_instance, "-", "address"] = apdu.pduSource
-            shelf[
+            snapshot[device_instance, "-", "address"] = apdu.pduSource
+            snapshot[
                 device_instance, "-", "maxAPDULengthAccepted"
             ] = apdu.maxAPDULengthAccepted
-            shelf[
+            snapshot[
                 device_instance, "-", "segmentationSupported"
             ] = apdu.segmentationSupported
 
@@ -596,7 +577,7 @@ class ReadPropertyToDo(ToDoItem):
             )
 
         # map the devid identifier to an address from the database
-        addr = shelf[self.devid, "-", "address"]
+        addr = snapshot[self.devid, "-", "address"]
         if not addr:
             raise ValueError("unknown device")
         if _debug:
@@ -682,7 +663,9 @@ class ReadPropertyToDo(ToDoItem):
                 str_prop += "[{}]".format(apdu.propertyArrayIndex)
 
             # save it in the snapshot
-            shelf[self.devid, "{}:{}".format(*apdu.objectIdentifier), str_prop] = value
+            snapshot[
+                self.devid, "{}:{}".format(*apdu.objectIdentifier), str_prop
+            ] = value
 
             # do something more
             self.returned_value(value)
@@ -791,7 +774,7 @@ class ReadPropertyMultipleToDo(ToDoItem):
             )
 
         # map the devid identifier to an address from the database
-        addr = shelf[self.devid, "-", "address"]
+        addr = snapshot[self.devid, "-", "address"]
         if not addr:
             raise ValueError("unknown device")
         if _debug:
@@ -930,7 +913,7 @@ class ReadPropertyMultipleToDo(ToDoItem):
                             print("{}: {}".format(propertyIdentifier, str_value))
 
                         # save it in the snapshot
-                        shelf[
+                        snapshot[
                             self.devid,
                             "{}:{}".format(*objectIdentifier),
                             str(propertyIdentifier),
@@ -1119,7 +1102,7 @@ class DiscoverConsoleCmd(ConsoleCmd):
                 request.pduDestination = Address(args[0])
                 if len(args) > 1:
                     request.wirtnNetwork = int(args[1])
-        except:
+        except Exception:
             print("invalid arguments")
             return
 
@@ -1144,7 +1127,7 @@ class DiscoverConsoleCmd(ConsoleCmd):
         try:
             request = InitializeRoutingTable()
             request.pduDestination = Address(args[0])
-        except:
+        except Exception:
             print("invalid arguments")
             return
 
@@ -1169,7 +1152,7 @@ class DiscoverConsoleCmd(ConsoleCmd):
                 request.pduDestination = Address(args[0])
             else:
                 request.pduDestination = LocalBroadcast()
-        except:
+        except Exception:
             print("invalid arguments")
             return
 
@@ -1301,7 +1284,7 @@ class DiscoverConsoleCmd(ConsoleCmd):
             i += 1
 
             # map the devid identifier to an address from the database
-            addr = shelf[devid, "-", "address"]
+            addr = snapshot[devid, "-", "address"]
             if not addr:
                 raise ValueError("unknown device")
             if _debug:
@@ -1477,7 +1460,7 @@ class DiscoverConsoleCmd(ConsoleCmd):
                                 print("{}: {}".format(property_label, str_value))
 
                             # save it in the snapshot
-                            shelf[
+                            snapshot[
                                 devid,
                                 "{}:{}".format(*objectIdentifier),
                                 str(propertyIdentifier),
@@ -1498,7 +1481,7 @@ class DiscoverConsoleCmd(ConsoleCmd):
 
 
 def main():
-    global args, this_device, this_application, shelf, who_is_to_do_list, application_to_do_list
+    global args, this_device, this_application, snapshot, who_is_to_do_list, application_to_do_list
 
     # parse the command line arguments
     parser = ConfigArgumentParser(description=__doc__)
@@ -1524,7 +1507,7 @@ def main():
         _log.debug("    - this_application: %r", this_application)
 
     # open/create the database
-    shelf = Snapshot(args.dbname)
+    snapshot = Snapshot(args.dbname)
 
     # special lists
     # network_path_to_do_list = NetworkPathToDoList(this_application.nse)
@@ -1545,7 +1528,7 @@ def main():
     _log.debug("fini")
 
     # close the database
-    shelf.close()
+    snapshot.close()
 
 
 if __name__ == "__main__":

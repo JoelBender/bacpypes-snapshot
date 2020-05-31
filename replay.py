@@ -9,7 +9,6 @@ and write commands (and rtn when it's needed).
 """
 
 import sys
-import shelve
 import argparse
 
 from bacpypes.debugging import bacpypes_debugging, ModuleLogger
@@ -68,6 +67,8 @@ from bacpypes.primitivedata import (
 from bacpypes.constructeddata import Array, Any, AnyAtomic
 from bacpypes.object import get_object_class, get_datatype
 
+from db import Snapshot
+
 # some debugging
 _debug = 0
 _log = ModuleLogger(globals())
@@ -77,58 +78,9 @@ args = None
 this_device = None
 this_application = None
 
-# errors
+
 class ConfigurationError(RuntimeError):
     pass
-
-
-@bacpypes_debugging
-class Snapshot:
-    def __init__(self, filename, flag="r"):
-        try:
-            self.shelf = shelve.open(filename, flag=flag)
-        except:
-            raise ConfigurationError(f"unable to open database: {filename!r}")
-
-    def __getitem__(self, item):
-        return self.shelf[str(item)]
-
-    def __setitem__(self, item, value):
-        self.shelf[str(item)] = value
-
-    def close(self):
-        self.shelf.close()
-
-    def items(self, devid=None, objid=None, propid=None):
-        if _debug:
-            Snapshot._debug("items %r %r %r", devid, objid, propid)
-
-        objtype, objinst = None, None
-        if objid is not None:
-            objtype, objinst = (objid + ":").split(":")[:2]
-
-        for k, v in self.shelf.items():
-            d, o, p = eval(k)
-
-            # match the device instance number
-            if (devid is not None) and (d != devid):
-                continue
-
-            # match the object identifer, 'x' or 'x:y'
-            if objid is not None:
-                # match the whole object identifier
-                if objinst and o != objid:
-                    continue
-
-                # match the type
-                ot, oi = o.split(":")
-                if o != ot:
-                    continue
-
-            # match the property identifier
-            if (propid is not None) and (p != propid):
-                continue
-            yield (d, o, p, v)
 
 
 @bacpypes_debugging
@@ -524,12 +476,21 @@ class ReplayApplication(
             prop_map[p] = v
 
         # build objects and add them to the application
-        for object_identifer, prop_map in obj_prop_map.items():
-            object_type, object_instance = object_identifer.split(":")
+        for object_identifier, prop_map in obj_prop_map.items():
+            object_type, object_instance = object_identifier.split(":")
             object_instance = int(object_instance)
 
             # build an instance of the object from its class
             object_class = get_object_class(object_type)
+            if not object_class:
+                sys.stdout.write(f"warning: {object_identifier} not supported\n")
+                continue
+
+            if "objectName" not in prop_map:
+                prop_map["objectName"] = f"({object_identifier})"
+            elif prop_map["objectName"] in self.objectName:
+                prop_map["objectName"] += f" ({object_identifier})"
+
             obj = object_class(**prop_map)
             if _debug:
                 ReplayApplication._debug("    - obj: %r", obj)
@@ -540,7 +501,7 @@ class ReplayApplication(
                 present_value_property.mutable = True
                 if _debug:
                     ReplayApplication._debug("    - mutable")
-            except:
+            except Exception:
                 pass
 
             # add it to the application
