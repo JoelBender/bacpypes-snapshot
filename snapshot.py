@@ -1265,6 +1265,54 @@ class DiscoverConsoleCmd(ConsoleCmd):
         except Exception as error:
             DiscoverConsoleCmd._exception("exception: %r", error)
 
+    def do_map(self, args):
+        """
+        map <devid> <addr>
+
+        Map a device identifier to a specific BACnet address.  Used when the
+        device is behind a gateway that doesn't proxy the I-Am that should
+        have been returned from a Who-Is request.
+        """
+        args = args.split()
+        if _debug:
+            DiscoverConsoleCmd._debug("do_rpm %r", args)
+
+        try:
+            devid = int(args[0])
+            addr = Address(args[1])
+            if _debug:
+                DiscoverConsoleCmd._debug("    - devid: %r", devid)
+                DiscoverConsoleCmd._debug("    - addr: %r", addr)
+
+            # map the devid identifier to an address from the database
+            deferred(snapshot.__setitem__, (devid, "-", "address"), addr)
+
+        except Exception as error:
+            DiscoverConsoleCmd._exception("exception: %r", error)
+
+    def do_rol(self, args):
+        """
+        rol <devid>
+
+        Start the process of reading the object list and the properties of the
+        objects from the device.  Usually this is automated when an I-Am is
+        returned.
+        """
+        args = args.split()
+        if _debug:
+            DiscoverConsoleCmd._debug("do_rpm %r", args)
+
+        try:
+            devid = int(args[0])
+            if _debug:
+                DiscoverConsoleCmd._debug("    - devid: %r", devid)
+
+            # kick off the process of reading all the objects
+            deferred(ReadObjectList, devid)
+
+        except Exception as error:
+            DiscoverConsoleCmd._exception("exception: %r", error)
+
     def do_rpm(self, args):
         """
         rpm <devid> ( <objid> ( <prop> [ <indx> ] )... )...
