@@ -55,7 +55,7 @@ from bacpypes.npdu import (
 )
 
 # IPv4 virtual link layer
-from bacpypes.bvllservice import BIPSimple, AnnexJCodec, UDPMultiplexer
+from bacpypes.bvllservice import BIPSimple, BIPForeign, AnnexJCodec, UDPMultiplexer
 
 # basic objects
 from bacpypes.local.device import LocalDeviceObject
@@ -323,7 +323,15 @@ class DiscoverNetworkServiceElement(NetworkServiceElement, IOQController):
 class DiscoverApplication(
     ApplicationIOController, WhoIsIAmServices, ReadWritePropertyServices
 ):
-    def __init__(self, localDevice, localAddress, deviceInfoCache=None, aseID=None):
+    def __init__(
+        self,
+        localDevice,
+        localAddress,
+        bbmdAddress,
+        bbmdTTL,
+        deviceInfoCache=None,
+        aseID=None,
+    ):
         if _debug:
             DiscoverApplication._debug(
                 "__init__ %r %r deviceInfoCache=%r aseID=%r",
@@ -365,9 +373,14 @@ class DiscoverApplication(
 
         # create a generic BIP stack, bound to the Annex J server
         # on the UDP multiplexer
-        self.bip = BIPSimple()
-        self.annexj = AnnexJCodec()
-        self.mux = UDPMultiplexer(self.localAddress)
+        if not bbmdAddress:
+            self.bip = BIPSimple()
+            self.annexj = AnnexJCodec()
+            self.mux = UDPMultiplexer(self.localAddress)
+        else:
+            self.bip = BIPForeign(bbmdAddress, bbmdTTL)
+            self.annexj = AnnexJCodec()
+            self.mux = UDPMultiplexer(self.localAddress, noBroadcast=True)
 
         # bind the bottom layers
         bind(self.bip, self.annexj, self.mux.annexJ)
@@ -1537,6 +1550,12 @@ def main():
     # database file name
     parser.add_argument("dbname", help="database file name")
 
+    # optional foreign device
+    parser.add_argument("--foreign", type=str, help="register as a foreign device")
+    parser.add_argument(
+        "--ttl", type=int, help="foreign device time-to-live", default=60
+    )
+
     args = parser.parse_args()
 
     if _debug:
@@ -1549,8 +1568,17 @@ def main():
     if _debug:
         _log.debug("    - this_device: %r", this_device)
 
+    # allow foreign device registration
+    if args.foreign:
+        bbmdAddress = Address(args.foreign)
+        bbmdTTL = args.ttl
+    else:
+        bbmdAddress = bbmdTTL = None
+
     # make a simple application
-    this_application = DiscoverApplication(this_device, args.ini.address)
+    this_application = DiscoverApplication(
+        this_device, args.ini.address, bbmdAddress, bbmdTTL
+    )
     if _debug:
         _log.debug("    - this_application: %r", this_application)
 
