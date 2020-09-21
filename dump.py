@@ -2,7 +2,7 @@
 
 import sys
 
-from bacpypes.debugging import bacpypes_debugging, ModuleLogger
+from bacpypes.debugging import ModuleLogger
 from bacpypes.consolelogging import ArgumentParser
 
 from db import Snapshot
@@ -36,17 +36,19 @@ for (devid, objid, propid, value) in snapshot.items(
     objid=args.objid if args.objid != "-" else None,
     propid=args.propid if args.propid != "-" else None,
 ):
+    if _debug:
+        _log.debug("    - objid, value: %r, %r (%r)", objid, value, type(value))
     if hasattr(value, "debug_contents"):
         print("{} {} {}".format(devid, objid, propid))
         value.debug_contents(file=sys.stdout)
-    elif isinstance(value, list):
+    elif isinstance(value, list) and value:
         print("{} {} {}".format(devid, objid, propid))
         for i, x in enumerate(value):
             print("    [{}]: {}".format(i, x))
             if hasattr(x, "debug_contents"):
                 x.debug_contents(file=sys.stdout, indent=4)
     else:
-        print("{} {} {} {}".format(devid, objid, propid, value))
+        print("{} {} {} {!r}".format(devid, objid, propid, value))
 
 _log.debug("fini")
 
