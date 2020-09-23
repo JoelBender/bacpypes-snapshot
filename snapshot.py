@@ -1012,6 +1012,7 @@ class ReadObjectListElement(ReadPropertyToDo):
 def ReadObjectProperties(devid, objid):
     if _debug:
         ReadObjectProperties._debug("ReadObjectProperties %r %r", devid, objid)
+    global args
 
     # get the profile, it contains the protocol services supported
     devobj = device_profile[devid]
@@ -1020,7 +1021,7 @@ def ReadObjectProperties(devid, objid):
         ReadObjectProperties._debug("    - supports rpm: %r", supports_rpm)
 
     # read all the properties at once if it's an option
-    if supports_rpm:
+    if supports_rpm and (not args.disable_rpm):
         ReadPropertyMultipleToDo(devid, objid, ["all"])
     else:
         ReadObjectPropertyList(devid, objid)
@@ -1555,6 +1556,13 @@ def main():
     parser.add_argument(
         "--ttl", type=int, help="foreign device time-to-live", default=60
     )
+
+    # add a way to disable using ReadPropertyMultiple
+    parser.add_argument("--disable-rpm",
+        help="disable read-property-multiple",
+        action="store_true",
+        default=None,
+        )
 
     args = parser.parse_args()
 
