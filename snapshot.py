@@ -755,8 +755,13 @@ class ReadObjectList(ReadPropertyToDo):
         devobj = device_profile[self.devid]
         devobj.objectList = ArrayOf(ObjectIdentifier)(value)
 
-        # read the properties of the objects
+        # loop through the list
         for objid in value:
+            # check to see if it is a known object type
+            if not get_object_class(objid[0]):
+                continue
+
+            # read the properties of the object
             ReadObjectProperties(self.devid, objid)
 
 
@@ -998,6 +1003,10 @@ class ReadObjectListElement(ReadPropertyToDo):
         # update the list
         devobj = device_profile[self.devid]
         devobj.objectList.append(value)
+
+        # check to see if it is a known object type
+        if not get_object_class(value[0]):
+            return
 
         # read the properties of the object
         ReadObjectProperties(self.devid, value)
@@ -1558,11 +1567,12 @@ def main():
     )
 
     # add a way to disable using ReadPropertyMultiple
-    parser.add_argument("--disable-rpm",
+    parser.add_argument(
+        "--disable-rpm",
         help="disable read-property-multiple",
         action="store_true",
         default=None,
-        )
+    )
 
     args = parser.parse_args()
 
